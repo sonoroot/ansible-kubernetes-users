@@ -1,0 +1,54 @@
+---
+- name: Include user variables
+  include_vars: vars/users.yml
+
+- name: Include env variables
+  include_vars: vars/env.yml
+
+- name: Create users folder
+  file: path=~/k8s-users/{{user}} state=directory
+
+- name: Create personal PKI folder 
+  file: path=~/k8s-users/{{user}}/pki state=directory mode=0700
+
+- name: Generate RSA for user {{user}}
+  local_action: shell /usr/bin/openssl genrsa -out ~/k8s-users/{{user}}/pki/{{user}}.pem 2048
+
+- name: Generate CSR for user {{user}}
+  local_action: shell /usr/bin/openssl req -new -key ~/k8s-users/{{user}}/pki/{{user}}.pem -out ~/k8s-users/{{user}}/pki/{{user}}.csr -subj "/CN=users:{{user}}/O={{group}}"
+  register: csr_req_original
+
+- name: Convert CSR file into base64
+  local_action: shell cat ~/k8s-users/{{user}}/pki/{{user}}.csr | base64 | tr -d '\n'
+  register: csr_req_base64
+
+- name: Generate CSR yaml file
+  template:
+    src: csr-req.yaml.j2
+    dest: ~/k8s-users/{{user}}/pki/csr-req.yaml
+
+- name: Ingest CSRs to kubernetes
+  local_action: shell kubectl create -f ~/k8s-users/{{user}}/pki/csr-req.yaml
+
+- name: Approve the CSRs
+  local_action: shell kubectl certificate approve user-request-{{user}}
+
+- name: Create the x509 certificate for user {{user}}
+  local_action: shell kubectl get csr user-request-{{user}} -o jsonpath='{.status.certificate}' | base64 -d > ~/k8s-users/{{user}}/pki/{{user}}.crt
+
+- name: Extract certificate-authority-data
+  local_action: shell grep certificate-authority-data /etc/kubernetes/admin.conf | awk {'print $2'}
+  register: certificate_authority_data
+
+- name: Extract client-certificate-data for user {{user}}
+  local_action: shell cat ~/k8s-users/{{user}}/pki/{{user}}.crt | base64 | tr -d '\n'
+  register: client_certificate_data
+
+- name: Extract client-key-data for user {{user}}
+  local_action: shell cat ~/k8s-users/{{user}}/pki/{{user}}.pem | base64 | tr -d '\n'
+  register: client_key_data
+
+- name: Generate kubeconfig file for user {{user}}
+  template:
+    src: kubeconfig.j2
+    dest: ~/k8s-users/{{user}}/kubeconfig

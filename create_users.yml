@@ -1,0 +1,4 @@
+- hosts: admin
+  roles:
+    - kubernetes_rbac_users
+    

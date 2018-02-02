@@ -48,7 +48,7 @@ For example to give a user admin rights within a specific namespace:
 ```bash
 # become admin user
 $ export KUBECONFIG=/etc/kubernetes/admin.conf
-# create a namespace named
+#TODO: add example of giving admin rights within a specific namespace
 ```
 
 References:
